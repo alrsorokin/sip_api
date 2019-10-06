@@ -1,0 +1,57 @@
+version: '3.4'
+
+services:
+
+  postgres:
+    restart: always
+    image: postgres:10-alpine
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_DB: sip
+    ports:
+      - "25432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+
+  sip_api:
+    build: .
+    environment:
+      FLASK_APP: sip_api.app:app
+      SQLALCHEMY_DATABASE_URI: 'postgresql://admin@db/sip'
+      SECRET_KEY: 'ebbd9094a097ebaf5838c008d5edbde509259dcbfb8a1d4610f7e5a83da0f787'
+      YANDEX_TOKEN: 'AgAAAAASFegaAAXNbHJmQkcYHUEsmzIXHvbPBU8'
+      UPLOAD_DIR: '/speechanalytics-connect'
+    volumes:
+      - ./sip_api:/app/sip_api
+      - ./migrations:/app/migrations
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+    links:
+      - postgres:db
+    command: gunicorn -b 0.0.0.0:5000 sip_api.app:app --reload --log-level=info --timeout 300
+    container_name: sip_api
+    stdin_open: true
+    tty: true
+
+  postgres_test:
+    restart: always
+    image: postgres:latest
+
+  test:
+    build: .
+    environment:
+      FLASK_APP: sip_api.app:app
+      TESTING: 'True'
+      SQLALCHEMY_DATABASE_URI: postgresql://postgres@db/postgres
+      YANDEX_TOKEN: 'AgAAAAASFegaAAXNbHJmQkcYHUEsmzIXHvbPBU8'
+      UPLOAD_DIR: '/test_api'
+    volumes:
+      - ./sip_api:/app/sip_api
+      - ./tests:/app/tests
+    command: python -m unittest tests/tests.py
+    depends_on:
+      - postgres_test
+    links:
+      - postgres_test:db
